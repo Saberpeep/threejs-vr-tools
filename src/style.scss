@@ -1,0 +1,28 @@
+body { 
+    margin: 0;
+}
+canvas { 
+    display: block;
+}
+
+@mixin square {
+    
+    &:after {
+        content: "";
+        display: block;
+        padding-bottom: 100%;
+    }
+}
+@mixin centerX($width) {
+    position: absolute;
+    top: calc(50% - #{$width} / 2);
+}
+@mixin centerY($height) {
+    position: absolute;
+    left: calc(50% - #{$height} / 2);
+}
+@mixin center($size) {
+    position: absolute;
+    top: calc(50% - #{$size} / 2);
+    left: calc(50% - #{$size} / 2);
+}
