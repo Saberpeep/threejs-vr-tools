@@ -20,7 +20,7 @@ var controls, grabables;
 var canvasCtx, canvasTexture, canvasMaterial;
 var debugDisplay, mega_toString;
 
-var tpArc, tpGhost, tpSurfaces, tpBlockers;
+var tpArc, tpGhost, tpSurfaces, tpBlockers, debugGhost;
 
 const x = new THREE.Vector3(1,0,0);
 const y = new THREE.Vector3(0,1,0);
@@ -112,7 +112,7 @@ function init() {
 
 	var floorGeometry = new THREE.PlaneBufferGeometry( roomSize, roomSize );
 	var floorMaterial = new THREE.MeshStandardMaterial( {
-		color: 0xeeeeee,
+		color: 0x999999,
 		roughness: 1.0,
 		metalness: 0.0
 	} );
@@ -259,6 +259,12 @@ function init() {
 			tpGhost.scale.multiplyScalar(0.3)
 			scene.add(tpGhost);
 			console.log("tpGhost:", tpGhost);
+
+			debugGhost = tpGhost.clone(true);
+			debugGhost.children[0].material = debugGhost.children[0].material.clone()
+			debugGhost.children[0].material.emissive.setHex(0x00ff99);
+			debugGhost.visible = true;
+			scene.add(debugGhost);
 		},
 		// called while loading is progressing
 		null,
@@ -434,8 +440,10 @@ function animate() {
 
 var tpRay = new THREE.Raycaster();
 var tpHelperA = new THREE.ArrowHelper(x, origin, 5, 0x0000ff);
+tpHelperA.visible = false;
 scene.add(tpHelperA);
 var tpHelperB = new THREE.ArrowHelper(x, origin, 5, 0x000099);
+tpHelperB.visible = false;
 scene.add(tpHelperB);
 var tpMode = false;
 var flickTurning = false;
@@ -458,6 +466,9 @@ function teleportStart(selectorObj, thumbstickVal){
 	tpHelperA.position.copy(tpRay.ray.origin);
 	tpHelperA.setDirection(tpRay.ray.direction);
 	tpHelperA.visible = true;
+
+	debugGhost.position.copy(player.position);
+	debugGhost.quaternion.copy(player.quaternion);
 
 	var intersections = tpRay.intersectObjects(tpSurfaces.children.concat(tpBlockers.children));
 	if ( intersections.length > 0 ) {
@@ -509,8 +520,8 @@ function teleportEnd(){
 	tpHelperB.visible = false;
 
 	if(teleportPoint){
-		player.position.copy(tpGhost.position);
-		player.quaternion.copy(tpGhost.quaternion);
+		debugGhost.position.copy(tpGhost.position);
+		debugGhost.quaternion.copy(tpGhost.quaternion);
 	}
 }
 
@@ -547,15 +558,16 @@ function render() {
 
 			var primaryThumbstick = {x: primaryGamepad.axes[2], y: primaryGamepad.axes[3]};
 
-			if(primaryThumbstick.y < -0.9 || tpMode){
-				tpMode = true;
-				teleportStart(selectorObj, primaryThumbstick);
-			}
+			//the tpend condition must come before the tpstart condition, otherwise the last thumbstick position may be invalid
 			if(Math.abs(primaryThumbstick.y) < 0.1 && Math.abs(primaryThumbstick.x) < 0.1){
 				if(tpMode){
 					teleportEnd();
 				}
 				tpMode = false;
+			}
+			if(primaryThumbstick.y < -0.9 || tpMode){
+				tpMode = true;
+				teleportStart(selectorObj, primaryThumbstick);
 			}
 			if(Math.abs(primaryThumbstick.x) > 0.5){
 				if(!tpMode && !flickTurning){
