@@ -14,6 +14,7 @@ var raycaster, intersected = [];
 var tempMatrix = new THREE.Matrix4();
 var tempVector = new THREE.Vector3();
 var tempVector2 = new THREE.Vector3();
+var tempEuler = new THREE.Euler();
 
 var controls, grabables;
 
@@ -50,9 +51,9 @@ function init() {
 	player.attach(camera);
 	scene.add(player);
 
-	controls = new OrbitControls( camera, container );
-	controls.target.set( 0, 1.6, 0 );
-	controls.update();
+	// controls = new OrbitControls( camera, container );
+	// controls.target.set( 0, 1.6, 0 );
+	// controls.update();
 
 	scene.add( new THREE.HemisphereLight( 0x808080, 0x606060 ) );
 
@@ -501,10 +502,16 @@ function teleportStart(selectorObj, thumbstickVal){
 			tpGhost.visible = true;
 			tpGhost.position.copy(intersection2.point);
 
-			var angle = getAngleBetweenPoints(origin, thumbstickVal);
-			const euler = new THREE.Euler(0,0,0,'YXZ');
-			euler.setFromRotationMatrix(tempMatrix);
-			tpGhost.rotation.y = -angle + euler.y;
+			//get thumbstick angle
+			var stickAngle = getAngleBetweenPoints(origin, thumbstickVal);
+			//get controller angle
+			var contAngle = tempEuler.setFromRotationMatrix(tempMatrix).y;
+			//get head angle
+			// var headAngle = getWorldRotation(renderer.xr.getCamera(camera), y, tempEuler);
+			// drawDebugToCanvas({head: headAngle});
+
+			tpGhost.rotation.y = -stickAngle + contAngle;
+
 
 		}else{
 			teleportPoint = null;
@@ -520,15 +527,46 @@ function teleportEnd(){
 	tpHelperB.visible = false;
 
 	if(teleportPoint){
-		debugGhost.position.copy(tpGhost.position);
-		debugGhost.quaternion.copy(tpGhost.quaternion);
+		// get head angle
+		// This creates an offset to aacount for the user physically turning around,
+		// and thus no longer lining up with the player object.
+		var headAngle = getWorldRotation(renderer.xr.getCamera(camera), y, tempEuler).y;
+		var playerAngle = getWorldRotation(player, y, tempEuler).y;
+		var offset = headAngle - playerAngle;
+
+
+		//teleport player to new position and rotation
+		player.position.copy(tpGhost.position);
+		player.rotation.y = tpGhost.rotation.y - offset;
+
+		//update debug ghost to match player object
+		debugGhost.position.copy(player.position);
+		debugGhost.quaternion.copy(player.quaternion);
 	}
 }
 
-function getAngleBetweenPoints(p1, p2){
-    return Math.atan2(p2.y - p1.y, p2.x - p1.x) + Math.PI / 2; 
+function getAngleBetweenPoints(p1, p2, a = 'x', b = 'y'){
+    return Math.atan2(p2[b] - p1[b], p2[a] - p1[a]) + Math.PI / 2; 
     //returns radians (...* 180 / Math.PI for degrees)
     //adding pi to offset ouput into positive range (0-360)
+}
+
+function getWorldRotation(object, axis, euler){
+	object.updateMatrixWorld();
+	tempMatrix.identity().extractRotation( object.matrixWorld );
+	if(axis.x){
+		euler.set(0,0,0,'XYZ');
+		euler.setFromRotationMatrix(tempMatrix);
+	}else if(axis.y){
+		euler.set(0,0,0,'YXZ');
+		euler.setFromRotationMatrix(tempMatrix);
+	}else if(axis.z){
+		euler.set(0,0,0,'ZXY');
+		euler.setFromRotationMatrix(tempMatrix);
+	}else{
+		throw new Error('invalid axis');
+	}
+	return euler;
 }
 
 function render() {
@@ -536,12 +574,17 @@ function render() {
 	cleanIntersected();
 
 	var session = renderer.xr.getSession();
-	if(session){
+	if(session && renderer.xr.isPresenting){
 		if (session.inputSources && session.inputSources[0]){
 			var gamepads = {};
 			session.inputSources.forEach((val, index)=>{gamepads[val.handedness] = val.gamepad});
 
 			var primaryGamepad = gamepads['right'] || gamepads['left'] || gamepads['none'];	
+			if(!primaryGamepad){
+				console.warn("No Primary Gamepad:", gamepads);
+				renderer.render( scene, camera );
+				return;
+			}
 
 			if (!runOnce){
 			
@@ -569,7 +612,7 @@ function render() {
 				tpMode = true;
 				teleportStart(selectorObj, primaryThumbstick);
 			}
-			if(Math.abs(primaryThumbstick.x) > 0.5){
+			if(Math.abs(primaryThumbstick.x) > 0.7){
 				if(!tpMode && !flickTurning){
 					flickTurning = true;
 					flickTurn(primaryThumbstick.x);
@@ -577,7 +620,10 @@ function render() {
 			}else{
 				flickTurning = false;
 			}
-			drawDebugToCanvas({gp0: gamepads['right'].axes, gp1: gamepads['left'].axes, tpMode: tpMode, flickTurning: flickTurning});
+			var headAngle = getWorldRotation(renderer.xr.getCamera(camera), y, tempEuler).y;
+			var playerAngle = getWorldRotation(player, y, tempEuler).y;
+			drawDebugToCanvas({head: headAngle, player: playerAngle, offset: headAngle - playerAngle });
+			//drawDebugToCanvas({gp0: gamepads['right'].axes, gp1: gamepads['left'].axes, tpMode: tpMode, flickTurning: flickTurning});
 		} 
 	}
 	// drawTextToCanvas(Object.keys(controllerGrip2).join(', '))
