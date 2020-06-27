@@ -21,7 +21,7 @@ var controls, grabables;
 var canvasCtx, canvasTexture, canvasMaterial;
 var debugDisplay, mega_toString;
 
-var tpArc, tpGhost, tpSurfaces, tpBlockers, debugGhost;
+var tpArc, tpGhost, tpSurfaces, tpBlockers, debugGhost, tpCurve, tpArcShape;
 
 const x = new THREE.Vector3(1,0,0);
 const y = new THREE.Vector3(0,1,0);
@@ -51,9 +51,9 @@ function init() {
 	player.attach(camera);
 	scene.add(player);
 
-	// controls = new OrbitControls( camera, container );
-	// controls.target.set( 0, 1.6, 0 );
-	// controls.update();
+	controls = new OrbitControls( camera, container );
+	controls.target.set( 0, 1.6, 0 );
+	controls.update();
 
 	scene.add( new THREE.HemisphereLight( 0x808080, 0x606060 ) );
 
@@ -224,19 +224,23 @@ function init() {
 
 	// Teleportation
 
-	var curve = new THREE.CubicBezierCurve(
-		new THREE.Vector2(),
-		new THREE.Vector2(),
-		new THREE.Vector2(),
-		new THREE.Vector2()
+	tpArcShape = new THREE.Shape();
+	tpArcShape.moveTo( 0.05, 0 );
+	tpArcShape.lineTo( 0, 0.1 );;
+	tpArcShape.lineTo( 0.1, 0.1 );
+	tpArcShape.lineTo( 0.05, 0 );
+	tpCurve = new THREE.CubicBezierCurve3(
+		new THREE.Vector3(0,1,0),
+		new THREE.Vector3(0,2,0),
+		new THREE.Vector3(0,1,1),
+		new THREE.Vector3(0,0,1)
 	);
-	var curvePoints = curve.getPoints( 50 );
-	var curveGeometry = new THREE.BufferGeometry().setFromPoints( curvePoints );
-	var curveMaterial = new THREE.LineBasicMaterial( { color : 0xff0000 } );
-	curveGeometry.lookAt(x)
-	tpArc = new THREE.Line( curveGeometry, curveMaterial );
-	tpArc.visible = false;
-	scene.add(tpArc);
+	// var curveGeometry = new THREE.ExtrudeGeometry(tpArcShape, {extrudePath: tpCurve, steps: 20})
+	// var curveMaterial = new THREE.MeshBasicMaterial( { color : 0xff0000 } );
+	// tpArc = new THREE.Mesh( curveGeometry, curveMaterial );
+	// tpArc.visible = false;
+	// scene.add(tpArc);
+	// console.log(tpArc);
 
 	var tpGhostGeo = new THREE.CylinderBufferGeometry( 0.2, 0.2, 0.2, 64 );
 	var tpGhostMat = new THREE.MeshBasicMaterial({color: 0x5555ff});
@@ -249,7 +253,7 @@ function init() {
 		'tpPointer.glb',
 		// called when the resource is loaded
 		function ( gltf ) {
-			console.log(gltf);
+			console.log("loaded tpPointer", gltf);
 			var isVisible = (tpGhost && tpGhost.visible) || false;
 			scene.remove(tpGhost);
 			tpGhost = gltf.scene.getObjectByName('tpPointer');
@@ -266,6 +270,31 @@ function init() {
 			debugGhost.children[0].material.emissive.setHex(0x00ff99);
 			debugGhost.visible = true;
 			scene.add(debugGhost);
+		},
+		// called while loading is progressing
+		null,
+		// called when loading has errors
+		function ( e ) {
+			console.error( 'error loading model', e );
+		}
+	);
+	gltfloader.load(
+		// resource URL
+		'tpArc.glb',
+		// called when the resource is loaded
+		function ( gltf ) {
+			console.log("loaded tpArc", gltf);
+			tpArc = gltf.scene.getObjectByName('Armature');
+			console.log("tpArc", tpArc);
+			scene.add(tpArc);
+
+			tpArc.rotation.x = -Math.PI / 2;
+
+			tpArc.position.set(0,0,0);
+			tpArc.scale.set(-1,1,1);
+			tpArc.updateMatrixWorld();
+
+			setTpArc(tpCurve);
 		},
 		// called while loading is progressing
 		null,
@@ -294,6 +323,22 @@ function init() {
 	debugDisplay = new THREE.Mesh(debugDisplayGeo, canvasMaterial);
 	debugDisplay.rotation.setFromVector3(tempVector.set(-Math.PI / 2 - Math.PI / 4, 0, -Math.PI / 2));
 	debugDisplay.translateOnAxis(x, 0.2);
+}
+
+function setTpArc(curve){
+	var points = tpCurve.getPoints(20);
+	var i = 1;
+	var currBone = tpArc.getObjectByName('Bone001');
+	tpArc.position.copy(points[0])
+	//points.unshift(points[0]);
+	while(currBone && i < points.length){
+		
+		tempVector.subVectors(points[i - 1], points[i]);
+		currBone.position.copy(tempVector);
+
+		currBone = currBone.children[0];
+		i++;
+	}
 }
 
 function copy(obj){
@@ -452,6 +497,10 @@ var teleportPoint;
 var runOnce = false;
 var gripObj, selectorObj;
 
+var tpHelperC = new THREE.AxesHelper();
+tpHelperC.visible = true;
+scene.add(tpHelperC);
+
 function flickTurn(dir){
 	var direction = (dir > 0)? -1 : 1;
 
@@ -464,6 +513,14 @@ function teleportStart(selectorObj, thumbstickVal){
 	tpRay.ray.origin.setFromMatrixPosition( controller.matrixWorld );
 	tpRay.ray.direction.set( 0, 0, - 1 ).applyMatrix4( tempMatrix );
 
+	//update 1st half of arc line
+	tpCurve.v0.copy(tpRay.ray.origin);
+	tempVector.set(0, 0.2, 0).applyMatrix4( controller.matrixWorld );
+	tpCurve.v1.copy(tempVector);
+
+	tpHelperC.position.copy(tempVector);
+
+	//helper arrow for debug
 	tpHelperA.position.copy(tpRay.ray.origin);
 	tpHelperA.setDirection(tpRay.ray.direction);
 	tpHelperA.visible = true;
@@ -480,12 +537,12 @@ function teleportStart(selectorObj, thumbstickVal){
 		tpHelperA.setLength(intersection.distance);
 
 		//cast second ray down
-		tempVector2.copy(intersection.point);
 		camera.getWorldPosition(tempVector2);
 		tempVector2.x = intersection.point.x;
 		tempVector2.z = intersection.point.z;
 		tpRay.set(tempVector2, negY);
 
+		//2nd helper arrow for debug
 		tpHelperB.position.copy(tpRay.ray.origin);
 		tpHelperB.setDirection(tpRay.ray.direction);
 		tpHelperB.visible = true;
@@ -494,6 +551,18 @@ function teleportStart(selectorObj, thumbstickVal){
 		if ( intersections2.length > 0 ) {
 
 			var intersection2 = intersections2[ 0 ];
+
+			//update 2nd half of arc line
+			tpCurve.v2.copy(intersection2.point);
+			tpCurve.v2.y = tpRay.ray.origin.y;
+			tpCurve.v3.copy(intersection2.point);
+			// tpArc.geometry.dispose();
+			// tpArc.geometry = new THREE.TubeBufferGeometry( tpCurve, 20, 0.5, 8, false );
+			// tpArc.geometry.needsUpdate = true;
+			// tpArc.visible = true;
+			if(tpArc){
+				setTpArc(tpCurve);
+			}
 
 			//helper arrow for debug
 			tpHelperB.setLength(intersection2.distance);
