@@ -215,17 +215,25 @@ export default function Teleportation(globals){
         }
     
         if(state.teleportPoint){
-            // get head angle
+            // adjust for head angle
             // This creates an offset to aacount for the user physically turning around,
             // and thus no longer lining up with the globals.player object.
-            var headAngle = utils.getWorldRotation(globals.renderer.xr.getCamera(globals.camera), constants.y, temps.euler).y;
+            var vrCam = globals.renderer.xr.getCamera(globals.camera);
+            var headAngle = utils.getWorldRotation(vrCam, constants.y, temps.euler).y;
             var playerAngle = utils.getWorldRotation(globals.player, constants.y, temps.euler).y;
-            var offset = headAngle - playerAngle;
-    
+            var rotOffset = headAngle - playerAngle;
+
+            // adjust for head position
+            // This creates an offset to aacount for the user physically walking around within their roomscale,
+            // and attempts to ensure the physical player ends up directly on the teleport point
+            var headPos = vrCam.getWorldPosition(temps.vector);
+            var posOffest = temps.vector.subVectors(globals.player.position, headPos);
     
             //teleport globals.player to new position and rotation
             globals.player.position.copy(locals.ghost.position);
-            globals.player.rotation.y = locals.ghost.rotation.y - offset;
+            globals.player.position.x += posOffest.x;
+            globals.player.position.z += posOffest.z;
+            globals.player.rotation.y = locals.ghost.rotation.y - rotOffset;
     
             if(debugMode){
                 //update debug ghost to match globals.player object
