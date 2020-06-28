@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
 import Mega_toString from './mega_toString.js';
+import { MeshBasicMaterial } from 'three';
 
 var container;
 var player, camera, scene, renderer;
@@ -293,6 +294,9 @@ function init() {
 			tpArc.position.set(0,0,0);
 			tpArc.scale.set(-1,1,1);
 			tpArc.updateMatrixWorld();
+			var mesh = tpArc.getObjectByProperty('type', 'SkinnedMesh');
+			mesh.material.color.set(0x0099ff);
+			tpArc.getObjectByName('tpArc').material = new THREE.MeshBasicMaterial({color: 0x0099ff, skinning: true, side: THREE.DoubleSide});
 
 			setTpArc(tpCurve);
 		},
@@ -326,14 +330,16 @@ function init() {
 }
 
 function setTpArc(curve){
-	var points = tpCurve.getPoints(20);
-	var i = 1;
-	var currBone = tpArc.getObjectByName('Bone001');
-	tpArc.position.copy(points[0])
-	//points.unshift(points[0]);
+	var points = curve.getPoints(20);
+	var i = 0;
+	var currBone = tpArc.getObjectByName('rootBone');
+	tpArc.position.copy(points[0]);
+	currBone.position.set(0,0,0);
+	currBone = currBone.children[0];
+	
 	while(currBone && i < points.length){
 		
-		tempVector.subVectors(points[i - 1], points[i]);
+		tempVector.subVectors(points[i - 1] || points[i], points[i]);
 		currBone.position.copy(tempVector);
 
 		currBone = currBone.children[0];
@@ -498,7 +504,7 @@ var runOnce = false;
 var gripObj, selectorObj;
 
 var tpHelperC = new THREE.AxesHelper();
-tpHelperC.visible = true;
+tpHelperC.visible = false;
 scene.add(tpHelperC);
 
 function flickTurn(dir){
@@ -519,6 +525,7 @@ function teleportStart(selectorObj, thumbstickVal){
 	tpCurve.v1.copy(tempVector);
 
 	tpHelperC.position.copy(tempVector);
+	tpHelperC.visible = true;
 
 	//helper arrow for debug
 	tpHelperA.position.copy(tpRay.ray.origin);
@@ -594,6 +601,7 @@ function teleportEnd(){
 	tpGhost.visible = false;
 	tpHelperA.visible = false;
 	tpHelperB.visible = false;
+	tpHelperC.visible = false;
 
 	if(teleportPoint){
 		// get head angle
