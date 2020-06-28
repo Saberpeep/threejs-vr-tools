@@ -295,8 +295,7 @@ function init() {
 			tpArc.scale.set(-1,1,1);
 			tpArc.updateMatrixWorld();
 			var mesh = tpArc.getObjectByProperty('type', 'SkinnedMesh');
-			mesh.material.color.set(0x0099ff);
-			tpArc.getObjectByName('tpArc').material = new THREE.MeshBasicMaterial({color: 0x0099ff, skinning: true, side: THREE.DoubleSide});
+			mesh.material = new THREE.MeshBasicMaterial({color: 0x0099ff, skinning: true, side: THREE.DoubleSide});
 
 			setTpArc(tpCurve);
 		},
@@ -335,6 +334,7 @@ function setTpArc(curve){
 	var currBone = tpArc.getObjectByName('rootBone');
 	tpArc.position.copy(points[0]);
 	currBone.position.set(0,0,0);
+
 	currBone = currBone.children[0];
 	
 	while(currBone && i < points.length){
