@@ -7,11 +7,14 @@ import Mega_toString from './mega_toString.js';
 import constants from './constants.js';
 import utils from './utils.js';
 import Locomotion from './locomotion.js';
+import Interactables from './interactables.js';
+
+var interactables, button1;
 
 var container;
 var player, camera, scene, renderer;
-var controller1, controller2;
-var controllerGrip1, controllerGrip2;
+var controller1, controller2, pointers = [];
+var controllerGrip1, controllerGrip2, grips = [];
 
 var raycaster, intersected = [];
 var tempMatrix = new THREE.Matrix4();
@@ -186,36 +189,34 @@ function init() {
 
 	// controllers
 
-	controller1 = renderer.xr.getController( 0 );
-	controller1.addEventListener( 'selectstart', onSelectStart );
-	controller1.addEventListener( 'selectend', onSelectEnd );
-	player.add( controller1 );
-
-	controller2 = renderer.xr.getController( 1 );
-	controller2.addEventListener( 'selectstart', onSelectStart );
-	controller2.addEventListener( 'selectend', onSelectEnd );
-	player.add( controller2 );
-
 	var controllerModelFactory = new XRControllerModelFactory();
 
-	controllerGrip1 = renderer.xr.getControllerGrip( 0 );
-	controllerGrip1.add( controllerModelFactory.createControllerModel( controllerGrip1 ) );
-	player.add( controllerGrip1 );
+	var handColliderGeo = new THREE.BoxBufferGeometry(0.1, 0.1, 0.1);
+	var handColliderMat = new THREE.MeshBasicMaterial({color:0x333333});
+	for (var i of [0,1]){
+		pointers[i] = renderer.xr.getController(i);
+		pointers[i].addEventListener( 'selectstart', onSelectStart );
+		pointers[i].addEventListener( 'selectend', onSelectEnd );
+		player.add(pointers[i]);
 
-	controllerGrip2 = renderer.xr.getControllerGrip( 1 );
-	controllerGrip2.add( controllerModelFactory.createControllerModel( controllerGrip2 ) );
-	player.add( controllerGrip2 );
+		grips[i] = renderer.xr.getControllerGrip(i);
+		grips[i].add( controllerModelFactory.createControllerModel(grips[i]) );
+		var handCollider = new THREE.Mesh(handColliderGeo, handColliderMat);
+		handCollider.name = "handCollider";
+		grips[i].add(handCollider);
+		player.add( grips[i] );
+	}
 
 	// Selection
 
-	var geometry = new THREE.BufferGeometry().setFromPoints( [ new THREE.Vector3( 0, 0, 0 ), new THREE.Vector3( 0, 0, - 1 ) ] );
+	var lineGeometry = new THREE.BufferGeometry().setFromPoints( [ new THREE.Vector3( 0, 0, 0 ), new THREE.Vector3( 0, 0, - 1 ) ] );
 
-	var line = new THREE.Line( geometry );
+	var line = new THREE.Line( lineGeometry );
 	line.name = 'line';
 	line.scale.z = 5;
 
-	controller1.add( line.clone() );
-	controller2.add( line.clone() );
+	pointers[0].add( line.clone() );
+	pointers[1].add( line.clone() );
 
 	raycaster = new THREE.Raycaster();
 
@@ -249,6 +250,30 @@ function init() {
 	debugDisplay = new THREE.Mesh(debugDisplayGeo, canvasMaterial);
 	debugDisplay.rotation.setFromVector3(tempVector.set(-Math.PI / 2 - Math.PI / 4, 0, -Math.PI / 2));
 	debugDisplay.translateOnAxis(constants.x, 0.2);
+
+	// Interactables
+
+	interactables = new Interactables();
+
+	var buttonGeo = new THREE.CylinderBufferGeometry( 0.1, 0.1, 0.1, 8 );
+	var buttonBaseGeo = new THREE.CylinderBufferGeometry( 0.2, 0.2, 0.1, 8 );
+	var buttonMat = new THREE.MeshBasicMaterial({color: 0xff0000});
+	var buttonBaseMat = new THREE.MeshBasicMaterial({color: 0x999999});
+	var buttonMesh1 = new THREE.Mesh(buttonGeo, buttonMat);
+	var buttonBaseMesh1 = new THREE.Mesh(buttonBaseGeo, buttonBaseMat);
+	buttonMesh1.position.y = 0.1;
+	buttonMesh1.castShadow = true;
+	buttonMesh1.receiveShadow = true;
+	buttonBaseMesh1.castShadow = true;
+	buttonBaseMesh1.receiveShadow = true;
+	button1 = new interactables.Button({
+		plunger: buttonMesh1,
+		offset: new THREE.Vector3(0,0.05,0)
+	});
+	button1.add(buttonMesh1);
+	button1.add(buttonBaseMesh1);
+	scene.add(button1);
+
 }
 
 function clearCanvas(){
@@ -391,8 +416,6 @@ function animate() {
 }
 
 var runOnce = false;
-var gripObj, selectorObj;
-
 
 function render() {
 
@@ -401,43 +424,57 @@ function render() {
 	var session = renderer.xr.getSession();
 	if(session && renderer.xr.isPresenting){
 		if (session.inputSources && session.inputSources[0]){
-			var gamepads = {};
-			session.inputSources.forEach((val, index)=>{gamepads[val.handedness] = val.gamepad});
+			var controllers = {};
+			session.inputSources.forEach((val, i)=>{controllers[val.handedness] = {
+				gamepad: val.gamepad,
+				pointer: pointers[i],
+				grip: grips[i],
+			}});
 
-			var primaryGamepad = gamepads['right'] || gamepads['left'] || gamepads['none'];	
-			if(!primaryGamepad){
-				console.warn("No Primary Gamepad:", gamepads);
-				renderer.render( scene, camera );
-				return;
-			}
 
-			if (!runOnce){
-			
-				if(session.inputSources[0].gamepad === primaryGamepad){
-					gripObj = controllerGrip1;
-					selectorObj = controller1;
-				}else{
-					gripObj = controllerGrip2;
-					selectorObj = controller2;
+			if (controllers['right']){
+				if (!runOnce){
+					controllers['right'].grip.add(debugDisplay);
+					runOnce = true;
 				}
-				gripObj.add(debugDisplay);
-				runOnce = true;
+
+				var rightThumbstick = {x: controllers['right'].gamepad.axes[2], y: controllers['right'].gamepad.axes[3]};
+
+				locomotion.handleInput(controllers['right'].pointer, rightThumbstick);
+
+				var buttonRes = button1.update(controllers['right'].grip.getObjectByName('handCollider'));
+				drawDebugToCanvas({pressed: buttonRes});
+	
+				// var headAngle = utils.getWorldRotation(renderer.xr.getCamera(camera), constants.y, tempEuler).y;
+				// var playerAngle = utils.getWorldRotation(player, constants.y, tempEuler).y;
+				// drawDebugToCanvas({head: headAngle, player: playerAngle, offset: headAngle - playerAngle });
+	
+				// drawDebugToCanvas({gp0: controllers['right'].gamepad.axes, gp1: controllers['left'].gamepad.axes, tpMode: tpMode, flickTurning: flickTurning});
+	
+				//gamepad mapping (oculus touch v2)
+				//trigger: 0, gripTrigger: 1, thumbstickClick: 3, A/X:4, B/Y: 5
+				//grip touched doesnt seem to work unless you also press it a little
+				// var out = [];
+				// var index = 0;
+				// for (var btn of controllers['left'].gamepad.buttons){
+				// 	out[index++] = {
+				// 		pressed: btn.pressed,
+				// 		touched: btn.touched,
+				// 		value: btn.value,
+				// 		btn: btn,
+				// 	};
+				// }
+				// drawDebugToCanvas(out);
+	
 			}
 
-			var primaryThumbstick = {x: primaryGamepad.axes[2], y: primaryGamepad.axes[3]};
-
-			locomotion.handleInput(selectorObj, primaryThumbstick);
 			
-			var headAngle = utils.getWorldRotation(renderer.xr.getCamera(camera), constants.y, tempEuler).y;
-			var playerAngle = utils.getWorldRotation(player, constants.y, tempEuler).y;
-			drawDebugToCanvas({head: headAngle, player: playerAngle, offset: headAngle - playerAngle });
-			//drawDebugToCanvas({gp0: gamepads['right'].axes, gp1: gamepads['left'].axes, tpMode: tpMode, flickTurning: flickTurning});
 		} 
 	}
 	// drawTextToCanvas(Object.keys(controllerGrip2).join(', '))
 	
-	intersectObjects( controller1 );
-	intersectObjects( controller2 );
+	intersectObjects( pointers[0] );
+	intersectObjects( pointers[1] );
 
 	renderer.render( scene, camera );
 
