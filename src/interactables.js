@@ -55,20 +55,25 @@ export default function Interactables(globals){
         }
 
         update(gripObj){
-            //check overall distance
+            
             this.pressed = false;
-            var pos = temps.vector.addVectors(this.getWorldPosition(temps.vector), this.offset);
-            var gripPos = gripObj.getWorldPosition(temps.vector2);
-            this.pressed = gripPos;
             var newPos = this.restPosition;
+
+            //get rotation of main object
+            temps.matrix.identity().extractRotation( this.matrixWorld );
+            temps.vector2.copy(this.offset).applyMatrix4( temps.matrix );
+            //use rotation to apply local offset to world position
+            var pos = temps.vector.addVectors(this.getWorldPosition(temps.vector), temps.vector2);
+            var gripPos = gripObj.getWorldPosition(temps.vector2);
+            //check overall distance
             if (pos.distanceTo(gripPos) <= this.throwLength * 2){
-                console.log("distance met!", pos.distanceTo(gripPos), this.throwLength);
-                var rayCaster = temps.rayCaster;
                 //if we are pretty close, check more accurately with a rayCaster
-                temps.matrix.identity().extractRotation( this.matrixWorld );
+                console.log("distance met!", pos.distanceTo(gripPos), this.throwLength);
+
+                var rayCaster = temps.rayCaster;
 
                 rayCaster.ray.origin.copy(pos);
-                rayCaster.ray.direction.copy(this.axis).applyMatrix4( temps.matrix );
+                rayCaster.ray.direction.copy(this.axis).applyMatrix4( temps.matrix ).normalize();
                 rayCaster.far = this.throwLength;
 
                 temps.arrowHelper.position.copy(rayCaster.ray.origin);
