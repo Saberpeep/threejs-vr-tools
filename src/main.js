@@ -9,7 +9,7 @@ import utils from './utils.js';
 import Locomotion from './locomotion.js';
 import Interactables from './interactables.js';
 
-var interactables, button1;
+var interactables, button1, lever1;
 
 var container;
 var player, camera, scene, renderer;
@@ -203,6 +203,7 @@ function init() {
 		grips[i].add( controllerModelFactory.createControllerModel(grips[i]) );
 		var handCollider = new THREE.Mesh(handColliderGeo, handColliderMat);
 		handCollider.name = "handCollider";
+		handCollider.visible = false;
 		grips[i].add(handCollider);
 		player.add( grips[i] );
 	}
@@ -253,8 +254,11 @@ function init() {
 
 	// Interactables
 
-	interactables = new Interactables();
+	interactables = new Interactables({
+		scene: scene,
+	});
 
+	// Button
 	var buttonGeo = new THREE.CylinderBufferGeometry( 0.1, 0.1, 0.1, 8 );
 	var buttonBaseGeo = new THREE.CylinderBufferGeometry( 0.2, 0.2, 0.1, 8 );
 	var buttonMat = new THREE.MeshBasicMaterial({color: 0xff0000});
@@ -268,11 +272,40 @@ function init() {
 	buttonBaseMesh1.receiveShadow = true;
 	button1 = new interactables.Button({
 		plunger: buttonMesh1,
-		offset: new THREE.Vector3(0,0.05,0)
+		offset: new THREE.Vector3(0,0.05,0),
+		throwLength: 0.09,
 	});
 	button1.add(buttonMesh1);
 	button1.add(buttonBaseMesh1);
 	scene.add(button1);
+	button1.position.set(0.2, 1, -1);
+	button1.rotation.x = Math.PI / 2;
+
+	// Lever
+	var leverGeo = new THREE.BoxBufferGeometry( 1, 2, 0.1 );
+	var leverHandleGeo = new THREE.CylinderBufferGeometry( 0.07, 0.07, 0.3, 8 );
+	var leverMat = new THREE.MeshBasicMaterial({color: 0x999999});
+	var leverHandleMat = new THREE.MeshBasicMaterial({color: 0x555555});
+	var leverMesh1 = new THREE.Mesh(leverGeo, leverMat);
+	var leverHandleMesh1 = new THREE.Mesh(leverHandleGeo, leverHandleMat);
+	leverMesh1.position.y = 1;
+	leverMesh1.castShadow = true;
+	leverMesh1.receiveShadow = true;
+	leverHandleMesh1.castShadow = true;
+	leverHandleMesh1.receiveShadow = true;
+	leverMesh1.position.set(0.5, 1, 0);
+	leverHandleMesh1.position.set(0.9, 1, 0);
+	leverHandleMesh1.rotation.x = Math.PI / 2;
+	lever1 = new interactables.Lever({
+		handlePos: leverHandleMesh1.position,
+		min: 0,
+		max: Math.PI,
+	});
+	lever1.position.set(1,0,0.5);
+	lever1.rotation.y = Math.PI / 2;
+	lever1.add(leverMesh1);
+	lever1.add(leverHandleMesh1);
+	scene.add(lever1);
 
 }
 
@@ -442,8 +475,9 @@ function render() {
 
 				locomotion.handleInput(controllers['right'].pointer, rightThumbstick);
 
-				var buttonRes = button1.update(controllers['right'].grip.getObjectByName('handCollider'));
-				drawDebugToCanvas({pressed: buttonRes});
+				button1.update(controllers['right'].grip.getObjectByName('handCollider'));
+				var leverRes = lever1.update(controllers['right'].grip, controllers['right'].gamepad.buttons[1].pressed);
+				drawDebugToCanvas({lever1: leverRes});
 	
 				// var headAngle = utils.getWorldRotation(renderer.xr.getCamera(camera), constants.y, tempEuler).y;
 				// var playerAngle = utils.getWorldRotation(player, constants.y, tempEuler).y;
